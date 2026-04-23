@@ -78,11 +78,17 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	scope, err := parseScope(r.URL.Query().Get("scope"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+
 	updated, err := h.usecase.Update(r.Context(), id, taskusecase.UpdateInput{
 		Title:       req.Title,
 		Description: req.Description,
 		Status:      req.Status,
-		Scope:       parseScope(r.URL.Query().Get("scope")),
+		Scope:       scope,
 	})
 	if err != nil {
 		writeUsecaseError(w, err)
@@ -99,8 +105,14 @@ func (h *TaskHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	scope, err := parseScope(r.URL.Query().Get("scope"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+
 	if err := h.usecase.Delete(r.Context(), id, taskusecase.DeleteInput{
-		Scope: parseScope(r.URL.Query().Get("scope")),
+		Scope: scope,
 	}); err != nil {
 		writeUsecaseError(w, err)
 		return
@@ -177,13 +189,15 @@ func writeJSON(w http.ResponseWriter, status int, payload any) {
 	_ = json.NewEncoder(w).Encode(payload)
 }
 
-func parseScope(raw string) taskusecase.Scope {
+func parseScope(raw string) (taskusecase.Scope, error) {
 	switch taskusecase.Scope(raw) {
-	case taskusecase.ThisAndFollowing:
-		return taskusecase.ThisAndFollowing
+	case "", taskusecase.This:
+		return taskusecase.This, nil
 	case taskusecase.All:
-		return taskusecase.All
+		return taskusecase.All, nil
+	case taskusecase.ThisAndFollowing:
+		return taskusecase.ThisAndFollowing, nil
 	default:
-		return taskusecase.This
+		return "", errors.New("invalid scope: allowed values are this, all, this_and_following")
 	}
 }
