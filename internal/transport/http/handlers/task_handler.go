@@ -21,16 +21,25 @@ func NewTaskHandler(usecase taskusecase.Usecase) *TaskHandler {
 }
 
 func (h *TaskHandler) Create(w http.ResponseWriter, r *http.Request) {
-	var req taskMutationDTO
+	var req createTaskRequestDTO
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
 
+	recurrenceType, recurrenceParams, startedAt, err := req.Recurrence.toDomain()
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+
 	created, err := h.usecase.Create(r.Context(), taskusecase.CreateInput{
-		Title:       req.Title,
-		Description: req.Description,
-		Status:      req.Status,
+		Title:            req.Title,
+		Description:      req.Description,
+		Status:           req.Status,
+		RecurrenceType:   recurrenceType,
+		RecurrenceParams: recurrenceParams,
+		StartedAt:        startedAt,
 	})
 	if err != nil {
 		writeUsecaseError(w, err)
@@ -63,7 +72,7 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req taskMutationDTO
+	var req updateTaskRequestDTO
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
@@ -73,6 +82,7 @@ func (h *TaskHandler) Update(w http.ResponseWriter, r *http.Request) {
 		Title:       req.Title,
 		Description: req.Description,
 		Status:      req.Status,
+		Scope:       parseScope(r.URL.Query().Get("scope")),
 	})
 	if err != nil {
 		writeUsecaseError(w, err)
@@ -89,7 +99,9 @@ func (h *TaskHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.usecase.Delete(r.Context(), id); err != nil {
+	if err := h.usecase.Delete(r.Context(), id, taskusecase.DeleteInput{
+		Scope: parseScope(r.URL.Query().Get("scope")),
+	}); err != nil {
 		writeUsecaseError(w, err)
 		return
 	}
@@ -163,4 +175,15 @@ func writeJSON(w http.ResponseWriter, status int, payload any) {
 	w.WriteHeader(status)
 
 	_ = json.NewEncoder(w).Encode(payload)
+}
+
+func parseScope(raw string) taskusecase.Scope {
+	switch taskusecase.Scope(raw) {
+	case taskusecase.ThisAndFollowing:
+		return taskusecase.ThisAndFollowing
+	case taskusecase.All:
+		return taskusecase.All
+	default:
+		return taskusecase.This
+	}
 }

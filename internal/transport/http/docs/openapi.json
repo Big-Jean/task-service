@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Task Service API",
-    "version": "1.0.0",
-    "description": "CRUD API for tasks built with clean architecture."
+    "version": "1.1.0",
+    "description": "CRUD API for tasks with recurring task series support."
   },
   "servers": [
     {
@@ -21,6 +21,7 @@
       "get": {
         "tags": ["Tasks"],
         "summary": "List tasks",
+        "description": "Before returning the list, the service materializes missing tasks for active recurring series up to the current day.",
         "responses": {
           "200": {
             "description": "Task list",
@@ -92,6 +93,16 @@
             "in": "path",
             "required": true,
             "schema": { "type": "integer", "format": "int64", "minimum": 1 }
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["this", "this_and_following", "all"],
+              "default": "this"
+            }
           }
         ],
         "requestBody": {
@@ -124,10 +135,21 @@
             "in": "path",
             "required": true,
             "schema": { "type": "integer", "format": "int64", "minimum": 1 }
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["this", "this_and_following", "all"],
+              "default": "this"
+            }
           }
         ],
         "responses": {
           "204": { "description": "Deleted" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
           "404": { "$ref": "#/components/responses/NotFound" }
         }
       }
@@ -159,16 +181,19 @@
         "properties": {
           "title": {
             "type": "string",
-            "example": "Prepare release"
+            "example": "Call patients"
           },
           "description": {
             "type": "string",
-            "example": "Collect release notes and check migrations"
+            "example": "Morning call campaign"
           },
           "status": {
             "type": "string",
             "enum": ["new", "in_progress", "done"],
             "example": "new"
+          },
+          "recurrence": {
+            "$ref": "#/components/schemas/Recurrence"
           }
         }
       },
@@ -191,10 +216,55 @@
           }
         }
       },
+      "Recurrence": {
+        "type": "object",
+        "required": ["type"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["daily", "monthly", "specific_dates", "day_parity"],
+            "example": "daily"
+          },
+          "every_n_days": {
+            "type": "integer",
+            "minimum": 1,
+            "example": 2,
+            "description": "Used only for daily recurrence."
+          },
+          "day_of_month": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 30,
+            "example": 15,
+            "description": "Used only for monthly recurrence."
+          },
+          "dates": {
+            "type": "array",
+            "description": "Used only for specific_dates recurrence.",
+            "items": {
+              "type": "string",
+              "format": "date",
+              "example": "2026-04-30"
+            }
+          },
+          "day_parity": {
+            "type": "string",
+            "enum": ["odd", "even"],
+            "example": "even",
+            "description": "Used only for day_parity recurrence."
+          },
+          "starts_on": {
+            "type": "string",
+            "format": "date",
+            "example": "2026-04-22"
+          }
+        }
+      },
       "Task": {
         "type": "object",
         "properties": {
           "id": { "type": "integer", "format": "int64", "example": 1 },
+          "task_series_id": { "type": "integer", "format": "int64", "example": 11, "nullable": true },
           "title": { "type": "string", "example": "Prepare release" },
           "description": {
             "type": "string",
@@ -205,15 +275,21 @@
             "enum": ["new", "in_progress", "done"],
             "example": "new"
           },
+          "task_date": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "example": "2026-04-22T00:00:00Z"
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
-            "example": "2026-03-24T00:00:00Z"
+            "example": "2026-04-22T09:30:00Z"
           },
           "updated_at": {
             "type": "string",
             "format": "date-time",
-            "example": "2026-03-24T00:00:00Z"
+            "example": "2026-04-22T09:30:00Z"
           }
         }
       },
